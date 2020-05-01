@@ -1,17 +1,6 @@
-// delaunay_triangulation.cpp
-// g++ -o gl delaunay_triangulation.cpp  -I/usr/X11/include -I/usr/X11/include/X11 -I/usr/X11/include/X11/GL -L/usr/X11/lib -lX11 -lXi -lXmu -lglut -lGL -lGLU -lm
-
-// #include<X11/X.h>
-// #include<X11/Xlib.h>
-// #include<GL/gl.h>
-// #include<GL/glx.h>
-// #include<GL/glu.h>
-
-// g++ -o dt de_t.cpp -I/usr/X11/include -I/usr/X11/include/X11 -L/usr/X11/lib -lX11 -lXi -lXmu -lglut -lGL -lGLU -lm
+// Delaunay triangulation and Curve construction
 // g++ -std=c++14  -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 de_t.cpp -o test
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wwrite-strings"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -20,36 +9,12 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>
-// #include <format>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xos.h>
 #include <X11/Xatom.h>
 
 using namespace std; 
-
-Display *display;
-Window  window;
-int border_width;
-int win_width, win_height;
-int win_x, win_y;
-
-XSetWindowAttributes attributes;
-long valuemask = 0;
-XGCValues gr_values,gc_yellow_values;
-Colormap color_map;
-XFontStruct *fontinfo;
-XColor tmp_color1, tmp_color2;
-GC gc_red,gc_yellow,gc_green;
-Visual *visual;
-int depth;
-int screen;
-XEvent event;
-XColor    color, dummy;
-
-
-int scale = 1;
-int shift = 10;
 
 typedef struct point {
 	int x;
@@ -125,7 +90,7 @@ bool point_inside_circle(v pt, circle c){
 
 string get_id(v p1, v p2){
   char buffer [50];
-  int n = sprintf (buffer, "%d%d", p1.id, p2.id);
+  int n = sprintf (buffer, "%lu%lu", p1.id, p2.id);
   return buffer;
 }
 
@@ -136,27 +101,26 @@ void swap_p(v *p1,v *p2){
 }
 
 void sortx(vertices &points){
-    int i,j,n=points.size();
-
-    for (i=0; i< n-1;i++){
-        //last i element are already in place
-        for(j= 0; j< n-i-1; j++){
-            if(points[j].x > points[j+1].x)
-                swap_p(&points[j],&points[j+1]);
-        }
-    } 
+  int i, j, n = points.size();
+  for (i=0; i< n-1;i++){
+    //last i element are already in place
+    for(j= 0; j< n-i-1; j++){
+      if(points[j].x > points[j+1].x)
+        swap_p(&points[j],&points[j+1]);
+    }
+  } 
 }
 
 void sorty(vertices &points){
-    int i,j,n=points.size();
+  int i, j, n = points.size();
 
-    for (i=0; i< n-1;i++){
-        //last i element are already in place
-        for(j= 0; j< n-i-1; j++){
-            if(points[j].y > points[j+1].y)
-                swap_p(&points[j],&points[j+1]);
-        }
-    } 
+  for (i=0; i< n-1;i++){
+    //last i element are already in place
+    for(j= 0; j< n-i-1; j++){
+      if(points[j].y > points[j+1].y)
+        swap_p(&points[j],&points[j+1]);
+    }
+  } 
 }
 
 inner_edge create_edge(v p1, v p2, v outer_point, bool visited=false){
@@ -198,9 +162,6 @@ void common_edges(edges &inner_edges, edges &tri_common_edges, triangles &tri){
         continue;
       }
       if(inner_edges[i].id == inner_edges[j].id || inner_edges[i].id == get_id(inner_edges[j].p2, inner_edges[j].p1)){
-        // if(inner_edges[i].outer_point.x == inner_edges[j].outer_point.x and inner_edges[i].outer_point.y == inner_edges[j].outer_point.y){
-        //   continue;
-        // }
         if(inner_edges[i].outer_point.id == inner_edges[j].outer_point.id){
           continue;
         }
@@ -473,13 +434,9 @@ pb perpendicular_bisector(v p1, v p2){
   float x = 1./2. * (p1.x + p2.x); 
   float y = 1./2. * (p1.y + p2.y);
   float d = (p2.y - p1.y);
-  float slope = d == 0 ? 0 : d /(p2.x - p1.x);
-  p.slope = d == 0 ? 0 : -1. * (1./slope);
+  float slope = d /(p2.x - p1.x);
+  p.slope = -1. * (1./slope);
   p.c = y - (p.slope * x);
-  if(p1.x == 20 && p1.y == 410){
-    cout << p1.x << "," << p2.x << endl ;
-    cout << x << "," << y << "," << slope << endl;
-  }
   return p;
 }
 
@@ -533,32 +490,36 @@ void construct_curve(edges &edg, vertices &vert, c_edges &curve_edges){
     bool pb_present = false;
     first_point = true;
     pb p;
-    int p_orientation;
-    if(((*itr).x - n.p.x) != 0){
+    int p_orientation, x;
+    float midpoint;
+    if(((*itr).x - n.p.x) == 0){
+      midpoint = ((*itr).y + n.p.y)/2;
+      x = 1;
+    }else if(((*itr).y - n.p.y) == 0){
+      midpoint = ((*itr).x + n.p.x)/2;
+      x = 0;
+    }else{
       p = perpendicular_bisector((*itr), n.p);
-      if((*itr).x == 20 && (*itr).y == 410)
-        cout << p.slope << "," << p.c << endl;
       pb_present = true;
       p_orientation = orientation_p(p, (*itr));
     }
+
     for(std::vector<nearest_neighbor>::iterator it = n_points.begin(); it != n_points.end(); ++it){
-      if((*itr).x == 20 && (*itr).y == 410) 
-        cout << "Neighbor Points: " << (*it).p.x << "," << (*it).p.y << endl;
       bool p_aligned = false;
-      if(!pb_present && (*it).p.x > (*itr).x){
-        p_aligned = true;
+      if(!pb_present){
+        if(x){
+          if(((*it).p.y <= midpoint) == ((*itr).y <= midpoint)){ 
+            p_aligned = true;
+          }
+        }else{
+          if(((*it).p.x <= midpoint) == ((*itr).x <= midpoint)){ 
+            p_aligned = true;
+          }
+        }
       }else if(orientation_p(p, (*it).p) == p_orientation){
         p_aligned = true;
       }
-      if((*itr).x == 20 && (*itr).y == 410){
-        cout << orientation_p(p, (*it).p) <<endl;
-        cout <<orientation_p(p, (*itr)) <<endl;
-        cout << (*it).dist << endl;
-      }
       if(p_aligned && (*it).p.id != n.p.id){
-        if((*itr).x == 20 && (*itr).y == 410){
-          cout << "Inside";
-        }
         if(first_point){
           n = *it;
           first_point = false;
@@ -567,14 +528,7 @@ void construct_curve(edges &edg, vertices &vert, c_edges &curve_edges){
         }
       }
     }
-    if((*itr).x == 20 && (*itr).y == 410){
-      cout << "Size:" << n_points.size() << endl;
-      cout << "p(" << (*itr).x << "," << (*itr).y<< "," << (*itr).id <<":";
-      cout << "b(" << e.p2.x << "," << e.p2.y<< ":"<<endl;
-    }
     e.p2 = n.p;
-    if((*itr).x == 20 && (*itr).y == 410)
-      cout << "a(" << e.p2.x << "," << e.p2.y << endl;
     curve_edges.push_back(e);
   }
 }
